@@ -386,6 +386,20 @@ impl Network {
         self.temporary_orchard_disabling_soft_fork_height() == Some(height)
     }
 
+    /// Zubit: returns the height at which P2PQH outputs start requiring an ML-DSA-44
+    /// signature, if configured. Never set on Mainnet.
+    pub fn qr_soft_fork_height(&self) -> Option<Height> {
+        match self {
+            Network::Mainnet => None,
+            Network::Testnet(parameters) => parameters.qr_soft_fork_height(),
+        }
+    }
+
+    /// Zubit: returns whether the P2PQH / ML-DSA-44 rule applies to transactions at `height`.
+    pub fn qr_soft_fork_active(&self, height: Height) -> bool {
+        self.qr_soft_fork_height().is_some_and(|h| height >= h)
+    }
+
     /// Returns whether the consensus rule requiring a canonically-sized Orchard proof
     /// is active at `height`.
     ///

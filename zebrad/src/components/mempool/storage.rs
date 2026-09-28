@@ -261,14 +261,20 @@ impl Storage {
         let transaction = tx.transaction.transaction.as_ref();
         let spent_outputs = &tx.spent_outputs;
 
-        for input in transaction.inputs() {
+        for (input_index, input) in transaction.inputs().iter().enumerate() {
             let unlock_script = match input {
                 transparent::Input::PrevOut { unlock_script, .. } => unlock_script,
                 transparent::Input::Coinbase { .. } => continue,
             };
 
             // Rule: scriptSig size must be within the standard limit.
-            if unlock_script.as_raw_bytes().len() > policy::MAX_STANDARD_SCRIPTSIG_SIZE {
+            // Zubit: P2PQH spends have their own (larger) canonical size.
+            let size_limit = spent_outputs
+                .get(input_index)
+                .map_or(policy::MAX_STANDARD_SCRIPTSIG_SIZE, |spent_output| {
+                    policy::standard_script_sig_limit(spent_output)
+                });
+            if unlock_script.as_raw_bytes().len() > size_limit {
                 return self
                     .reject_non_standard(tx, NonStandardTransactionError::ScriptSigTooLarge);
             }
@@ -324,6 +330,13 @@ impl Storage {
             let script_kind = policy::standard_script_kind(lock_script);
 
             match script_kind {
+                // Zubit: P2PQH outputs are standard. The transaction verifier has already
+                // rejected them if the soft fork is not active.
+                None if policy::is_p2pqh(lock_script) => {
+                    if output.is_dust() {
+                        return self.reject_non_standard(tx, NonStandardTransactionError::IsDust);
+                    }
+                }
                 None => {
                     // Rule: output script must be standard (P2PKH/P2SH/P2PK/multisig/OP_RETURN).
                     return self.reject_non_standard(

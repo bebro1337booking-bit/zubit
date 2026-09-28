@@ -8,6 +8,8 @@
 #[cfg(test)]
 mod tests;
 
+pub mod qr;
+
 use core::fmt;
 use std::sync::Arc;
 
@@ -37,6 +39,8 @@ pub enum Error {
     Unknown(libzcash_script::Error),
     /// transaction is invalid according to zebra_chain (not a zcash_script error)
     TxInvalid(#[from] zebra_chain::Error),
+    /// Zubit: the P2PQH post-quantum spend rule failed
+    Qr(#[from] qr::QrError),
 }
 
 impl fmt::Display for Error {
@@ -49,6 +53,7 @@ impl fmt::Display for Error {
             }
             Error::Unknown(e) => format!("unknown error from zcash_script: {e:?}"),
             Error::TxInvalid(e) => format!("tx is invalid: {e}"),
+            Error::Qr(e) => format!("post-quantum spend rule failed: {e}"),
         })
     }
 }
@@ -91,6 +96,9 @@ pub struct CachedFfiTransaction {
 
     /// The sighasher context to use to compute sighashes.
     sighasher: SigHasher,
+
+    /// Zubit: whether P2PQH outputs must be spent with an ML-DSA-44 signature.
+    qr_rules_active: bool,
 }
 
 impl CachedFfiTransaction {
@@ -107,7 +115,16 @@ impl CachedFfiTransaction {
             transaction,
             all_previous_outputs,
             sighasher,
+            qr_rules_active: false,
         })
+    }
+
+    /// Zubit: enables or disables the P2PQH post-quantum spend rule for this transaction.
+    ///
+    /// Callers pass `network.qr_soft_fork_active(height)`.
+    pub fn with_qr_rules(mut self, active: bool) -> Self {
+        self.qr_rules_active = active;
+        self
     }
 
     /// Returns the transparent inputs of this transaction, borrowed from the underlying
@@ -266,7 +283,29 @@ impl CachedFfiTransaction {
                 } else {
                     Err(Error::ScriptInvalid)
                 }
-            })
+            })?;
+
+        // Zubit soft fork: a P2PQH output additionally needs an ML-DSA-44 signature over the
+        // ZIP 244 SIGHASH_ALL digest. The legacy script above only checked that the scriptSig
+        // is push-only.
+        if self.qr_rules_active {
+            if let Some(committed_hash) = qr::parse_lock_script(script_pub_key) {
+                if self.transaction.version() < 5 {
+                    return Err(qr::QrError::UnsupportedTransactionVersion.into());
+                }
+                let sighash = self
+                    .sighasher()
+                    .sighash(HashType::ALL, Some((input_index, script_pub_key.to_vec())));
+                qr::verify_spend(
+                    self.transaction.version(),
+                    &committed_hash,
+                    signature_script,
+                    &sighash.0,
+                )?;
+            }
+        }
+
+        Ok(())
     }
 }
 

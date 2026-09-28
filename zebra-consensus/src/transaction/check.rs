@@ -661,6 +661,41 @@ pub const MAX_P2SH_SIGOPS: u32 = 15;
 /// <https://github.com/zcash/zcash/blob/v6.11.0/src/policy/policy.cpp#L92-L99>
 pub const MAX_STANDARD_SCRIPTSIG_SIZE: usize = 1650;
 
+/// Zubit: returns true if `lock_script` is a P2PQH (ML-DSA-44) output.
+pub fn is_p2pqh(lock_script: &transparent::Script) -> bool {
+    zebra_script::qr::parse_lock_script(lock_script.as_raw_bytes()).is_some()
+}
+
+/// Zubit: the standard `scriptSig` size limit for an input spending `spent_output`.
+///
+/// P2PQH spends carry an ML-DSA-44 key and signature, so their canonical `scriptSig` is larger
+/// than zcashd's limit. Their exact shape is enforced by the consensus rule.
+pub fn standard_script_sig_limit(spent_output: &transparent::Output) -> usize {
+    if is_p2pqh(&spent_output.lock_script) {
+        zebra_script::qr::SPEND_SCRIPT_SIG_LEN
+    } else {
+        MAX_STANDARD_SCRIPTSIG_SIZE
+    }
+}
+
+/// Zubit mempool policy: before the soft fork activates, P2PQH outputs are anyone-can-spend,
+/// so the mempool refuses to create or spend them.
+pub fn mempool_qr_policy(
+    tx: &Transaction,
+    spent_outputs: &[transparent::Output],
+    qr_active: bool,
+) -> Result<(), TransactionError> {
+    if qr_active {
+        return Ok(());
+    }
+    let creates = tx.outputs().iter().any(|o| is_p2pqh(&o.lock_script));
+    let spends = spent_outputs.iter().any(|o| is_p2pqh(&o.lock_script));
+    if creates || spends {
+        return Err(TransactionError::QrBeforeActivation);
+    }
+    Ok(())
+}
+
 /// Classify a script using the `zcash_script` solver.
 ///
 /// Returns `Some(kind)` for standard script types, `None` for non-standard.
@@ -745,6 +780,11 @@ pub fn are_inputs_standard(tx: &Transaction, spent_outputs: &[transparent::Outpu
             transparent::Input::PrevOut { unlock_script, .. } => unlock_script,
             transparent::Input::Coinbase { .. } => continue,
         };
+
+        // Zubit: P2PQH spends are standard; their shape is a consensus rule.
+        if is_p2pqh(&spent_output.lock_script) {
+            continue;
+        }
 
         // Step 1: Classify the spent output's scriptPubKey via the zcash_script solver.
         let script_kind = match standard_script_kind(&spent_output.lock_script) {
@@ -844,7 +884,7 @@ pub fn mempool_standard_input_scripts(
 
         // Rule: the scriptSig must be within the standard size limit.
         let size = unlock_script.as_raw_bytes().len();
-        if size > MAX_STANDARD_SCRIPTSIG_SIZE {
+        if size > standard_script_sig_limit(&spent_outputs[input_index]) {
             return Err(TransactionError::NonStandardScriptSigSize { input_index, size });
         }
 

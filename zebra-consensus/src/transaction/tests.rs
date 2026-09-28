@@ -6160,3 +6160,57 @@ async fn non_coinbase_with_null_prevout_input_is_rejected() {
         .await;
     assert_eq!(rsp, Err(TransactionError::NonCoinbaseHasCoinbaseInput));
 }
+
+/// Zubit: P2PQH spends get their own standard scriptSig size, and the mempool refuses to
+/// create or spend P2PQH outputs before the soft fork is active.
+#[test]
+fn mempool_qr_policy_and_standardness() {
+    let _init_guard = zebra_test::init();
+
+    let p2pqh_output = transparent::Output {
+        value: Amount::try_from(1_000_000).expect("valid amount"),
+        lock_script: transparent::Script::new(&zebra_script::qr::lock_script_for_hash(&[7; 32])),
+    };
+    let spend = |unlock_bytes: &[u8]| {
+        Transaction::test_v5(
+            NetworkUpgrade::Nu5,
+            vec![transparent::Input::PrevOut {
+                outpoint: transparent::OutPoint {
+                    hash: Hash([0u8; 32]),
+                    index: 0,
+                },
+                unlock_script: transparent::Script::new(unlock_bytes),
+                sequence: u32::MAX,
+            }],
+            vec![p2pqh_output.clone()],
+            LockTime::unlocked(),
+            Height(0),
+        )
+    };
+    let spent = std::slice::from_ref(&p2pqh_output);
+
+    // A canonical-size P2PQH scriptSig is push-only and larger than zcashd's 1650-byte limit.
+    let (pk, sig) = (
+        [1u8; zebra_script::qr::PK_LEN],
+        [2u8; zebra_script::qr::SIG_LEN],
+    );
+    let canonical = zebra_script::qr::encode_spend(&pk, &sig);
+    assert!(canonical.len() > check::MAX_STANDARD_SCRIPTSIG_SIZE);
+    let tx = spend(&canonical);
+    assert_eq!(check::mempool_standard_input_scripts(&tx, spent), Ok(()));
+
+    // Anything larger is still non-standard.
+    let mut too_big = canonical.clone();
+    too_big.extend_from_slice(&[0x01, 0xaa]);
+    assert!(matches!(
+        check::mempool_standard_input_scripts(&spend(&too_big), spent),
+        Err(TransactionError::NonStandardScriptSigSize { .. })
+    ));
+
+    // Before activation, P2PQH outputs are anyone-can-spend, so the mempool refuses them.
+    assert_eq!(
+        check::mempool_qr_policy(&tx, spent, false),
+        Err(TransactionError::QrBeforeActivation)
+    );
+    assert_eq!(check::mempool_qr_policy(&tx, spent, true), Ok(()));
+}
