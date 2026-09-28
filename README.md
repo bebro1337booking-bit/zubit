@@ -122,14 +122,3 @@ attacker exists.
 Built on [Zebra](https://github.com/ZcashFoundation/zebra) by the Zcash Foundation (MIT OR Apache-2.0);
 the original README is in [`README.zebra.md`](README.zebra.md). ML-DSA via the
 [`fips204`](https://crates.io/crates/fips204) crate. Code is released under the same licenses as Zebra.
-
----
-
-## Коротко (RU)
-
-**Zubit** — исследовательский форк узла Zebra для Zcash. Он добавляет новый тип прозрачного выхода
-**P2PQH**, который можно потратить только с постквантовой подписью **ML-DSA-44** (стандарт NIST
-FIPS 204). Изменение устроено как мягкий форк и включается с заданной высоты блока. Всё работает на
-локальной сети Regtest: демо переводит монеты на P2PQH, узел отклоняет четыре поддельные траты и
-принимает настоящую. В основной сети Zcash это не действует — для этого нужен ZIP и обновление сети.
-Код не проходил аудит.
