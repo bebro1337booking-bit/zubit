@@ -13,7 +13,8 @@ use zebra_chain::transparent;
 // mempool transactions *before* script verification (`check::mempool_standard_input_scripts`).
 // They are re-exported here for the storage-time policy checks, so the two paths can't drift apart.
 pub(super) use zebra_consensus::transaction::check::{
-    are_inputs_standard, standard_script_kind, MAX_STANDARD_SCRIPTSIG_SIZE,
+    are_inputs_standard, is_p2pqh, standard_script_kind, standard_script_sig_limit,
+    MAX_STANDARD_SCRIPTSIG_SIZE,
 };
 
 /// Maximum number of signature operations allowed per standard transaction (zcashd `MAX_STANDARD_TX_SIGOPS`).

@@ -1,0 +1,27 @@
+[package]
+name = "zubit-wallet"
+version = "0.1.0"
+description = "Zubit demo wallet: ML-DSA-44 keys, P2PQH outputs and post-quantum spends on Regtest"
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "zubit-wallet"
+path = "src/main.rs"
+
+[dependencies]
+zebra-chain = { path = "../zebra-chain" }
+zebra-script = { path = "../zebra-script" }
+
+bs58 = { version = "0.5.1", features = ["check"] }
+fips204 = { version = "0.4.6", default-features = false, features = ["ml-dsa-44", "default-rng"] }
+hex = { workspace = true }
+rand = { workspace = true }
+ripemd = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[lints]
+workspace = true

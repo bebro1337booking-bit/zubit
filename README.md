@@ -1,200 +1,135 @@
-![Zebra logotype](https://zfnd.org/wp-content/uploads/2022/03/zebra-logotype.png)
+<p align="center">
+  <img src="zubit/assets/banner.svg" alt="Zubit — Quantum Resistant Zebra for Zcash Blockchain" width="100%">
+</p>
+
+<p align="center">
+  <b>Post-quantum ML-DSA-44 signatures for transparent ZEC, as a soft fork in the Zebra node.</b><br>
+  <sub>Research fork of <a href="https://github.com/ZcashFoundation/zebra">Zebra</a> v6.4.2 · runs on a local Regtest chain · not active on Zcash mainnet or testnet</sub>
+</p>
 
 ---
 
-[![Unit Tests](https://github.com/ZcashFoundation/zebra/actions/workflows/tests-unit.yml/badge.svg)](https://github.com/ZcashFoundation/zebra/actions/workflows/tests-unit.yml)
-[![Lint](https://github.com/ZcashFoundation/zebra/actions/workflows/lint.yml/badge.svg)](https://github.com/ZcashFoundation/zebra/actions/workflows/lint.yml)
-[![Integration Tests (GCP)](https://github.com/ZcashFoundation/zebra/actions/workflows/zfnd-ci-integration-tests-gcp.yml/badge.svg)](https://github.com/ZcashFoundation/zebra/actions/workflows/zfnd-ci-integration-tests-gcp.yml)
-[![codecov](https://codecov.io/gh/ZcashFoundation/zebra/branch/main/graph/badge.svg)](https://codecov.io/gh/ZcashFoundation/zebra)
-[![Build docs](https://github.com/ZcashFoundation/zebra/actions/workflows/book.yml/badge.svg)](https://github.com/ZcashFoundation/zebra/actions/workflows/book.yml)
-[![Deploy Nodes (GCP)](https://github.com/ZcashFoundation/zebra/actions/workflows/zfnd-deploy-nodes-gcp.yml/badge.svg)](https://github.com/ZcashFoundation/zebra/actions/workflows/zfnd-deploy-nodes-gcp.yml)
-![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)
+## Why
 
-- [Getting Started](#getting-started)
-  - [Docker](#docker)
-  - [Manual Install](#manual-install)
-- [CI/CD Architecture](#cicd-architecture)
-- [Documentation](#documentation)
-- [User support](#user-support)
-- [Security](#security)
-- [License](#license)
+Transparent Zcash outputs are protected by ECDSA on secp256k1. A large quantum computer running
+Shor's algorithm could recover those private keys and spend the coins.
 
-[Zebra](https://zebra.zfnd.org/) is a Zcash full node written in Rust.
+Zubit adds a new kind of transparent output, **P2PQH** (pay-to-post-quantum-pubkey-hash), that can
+only be spent with an **ML-DSA-44** signature — the NIST-standardized lattice signature scheme
+(FIPS 204). Zebra enforces the rule from a configured activation height.
 
-## Getting Started
+## How it works
 
-You can run Zebra using our [Docker
-image](https://hub.docker.com/r/zfnd/zebra/tags) or you can install it manually.
+<p align="center">
+  <img src="zubit/assets/how-it-works.svg" alt="Key, lock, spend, and the checks Zebra runs" width="100%">
+</p>
 
-### Docker
+- **Output:** `04 "ZUB1" OP_DROP 20 <BLAKE2b-256(pk)>` — 39 bytes, commits only to a hash of the key.
+- **Spend:** the `scriptSig` carries `pk || sig` (1 312 + 2 420 bytes) in canonical 520-byte pushes.
+- **Signed message:** the ZIP 244 `SIGHASH_ALL` digest of the input, with FIPS 204 context `"Zubit-v1"`.
+- **Soft fork:** under the old rules a P2PQH output is anyone-can-spend, so old nodes accept every
+  block Zubit nodes accept. No new transaction version, no change to the C++ script interpreter.
+- **Mempool:** before activation, Zebra refuses to create or spend P2PQH outputs (they would be
+  unprotected). After activation, P2PQH spends are standard despite their larger `scriptSig`.
 
-This command will run our latest release, and sync it to the tip:
+Full design: [`zubit/DESIGN.md`](zubit/DESIGN.md).
 
-```sh
-docker run -d \
-  --name zebra \
-  -p 8233:8233 \
-  -v zebrad-cache:/home/zebra/.cache/zebra \
-  zfnd/zebra:latest
+## It runs
+
+A real `zebrad` node on Regtest, driven by the included `zubit-wallet` tool: fund a P2PQH output,
+try four invalid spends, then spend it with the owner's key.
+
+<p align="center">
+  <img src="zubit/assets/demo.svg" alt="Output of the Regtest demo: four invalid spends rejected, the ML-DSA-44 spend mined" width="100%">
+</p>
+
+## Quick start (Regtest)
+
+Requirements: Rust (pinned by `rust-toolchain.toml`), a C++ toolchain, and LLVM/libclang
+(`LIBCLANG_PATH`) for RocksDB. See [`README.zebra.md`](README.zebra.md) for Zebra's full build notes.
+
+```bash
+cargo build -p zebrad -p zubit-wallet
 ```
 
-The `-p 8233:8233` flag exposes the P2P port so other Zcash nodes can connect to
-yours, and `-v` persists the chain state across restarts (use port `18233` for
-Testnet). For more information, read our [Docker
-documentation](https://zebra.zfnd.org/user/docker.html).
-
-### Manual Install
-
-Building Zebra requires [Rust](https://www.rust-lang.org/tools/install),
-[libclang](https://clang.llvm.org/doxygen/group__CINDEX.html), and a C++
-compiler. Below are quick summaries for installing these dependencies.
-
-[//]: # "The empty lines in the `summary` tag below are required for correct Markdown rendering."
-
-<details><summary>
-
-#### General Instructions for Installing Dependencies
-
-</summary>
-
-1. Install [`cargo` and `rustc`](https://www.rust-lang.org/tools/install).
-2. Install Zebra's build dependencies:
-   - **libclang**, which is a library that comes under various names, typically
-     `libclang`, `libclang-dev`, `llvm`, or `llvm-dev`;
-   - **clang** or another C++ compiler (`g++,` which is for all platforms or
-     `Xcode`, which is for macOS);
-   - **[`protoc`](https://grpc.io/docs/protoc-installation/)** (optional).
-
-</details>
-
-[//]: # "The empty lines in the `summary` tag below are required for correct Markdown rendering."
-
-<details><summary>
-
-#### Dependencies on Arch Linux
-
-</summary>
-
-```sh
-sudo pacman -S rust clang protobuf
+```bash
+target/debug/zebrad -c zubit/regtest.toml start
 ```
 
-Note that the package `clang` includes `libclang` as well. If you hit a
-compiling failure in `rocksdb`, see the [GCC 15 workaround](#gcc-15-workaround)
-below.
+In a second terminal:
 
-</details>
-
-<details><summary>
-
-#### GCC 15 workaround
-
-</summary>
-
-GCC 15, which is the default on many recent distros like Arch Linux and Ubuntu
-25 onwards, introduces a compiling failure in the version of the `rocksdb`
-dependency used by Zebra. A workaround is running the following before
-installing Zebra:
-
-```sh
-export CXXFLAGS="$CXXFLAGS -include cstdint"
+```bash
+target/debug/zubit-wallet keygen demo-key.json
 ```
 
-</details>
-
-On `x86_64` or `aarch64` Linux (glibc 2.34+), you can skip the build dependencies
-and download a signed, pre-built binary with
-[`cargo binstall`](https://github.com/cargo-bins/cargo-binstall):
-
-```sh
-cargo binstall zebrad
+```bash
+target/debug/zubit-wallet demo 127.0.0.1:18232 demo-key.json
 ```
 
-The same binaries are attached to each
-[GitHub release](https://github.com/ZcashFoundation/zebra/releases), with a
-SHA-256 checksum, a Sigstore build-provenance attestation, and a Cosign signature.
+The Regtest config ([`zubit/regtest.toml`](zubit/regtest.toml)) activates NU5 and the Zubit
+rule at height 1. Its miner address is `P2SH(OP_TRUE)`, so demo funds are spendable without ECDSA.
 
-Otherwise, once you have the dependencies in place, you can build and install
-Zebra from source with:
+## Tests
 
-```sh
-cargo install --locked zebrad
+```bash
+cargo test -p zebra-script qr
 ```
 
-Alternatively, you can install it from GitHub:
-
-```sh
-cargo install --git https://github.com/ZcashFoundation/zebra --tag v6.0.0 zebrad
+```bash
+cargo test -p zebra-chain qr_soft_fork
 ```
 
-You can start Zebra by running
-
-```sh
-zebrad start
+```bash
+cargo test -p zebra-network regtest_qr_soft_fork
 ```
 
-Refer to the [Building and Installing
-Zebra](https://zebra.zfnd.org/user/install.html) and [Running
-Zebra](https://zebra.zfnd.org/user/run.html) sections in the book for enabling
-optional features, detailed configuration and further details.
+```bash
+cargo test -p zebra-consensus mempool_qr_policy
+```
 
-## CI/CD Architecture
+The `zebra-script` tests include a full-verification test through the real script interpreter:
+the same legacy-style spend passes without the soft fork and is rejected with it.
 
-Zebra uses a comprehensive CI/CD system built on GitHub Actions to ensure code
-quality, maintain stability, and automate routine tasks. Our CI/CD
-infrastructure:
+## What changed in Zebra
 
-- Runs automated tests on every PR and commit.
-- Manages deployments to various environments.
-- Handles cross-platform compatibility checks.
-- Automates release processes.
+| Crate | Change |
+|---|---|
+| `zebra-script` | new `qr` module: P2PQH template, canonical spend encoding, ML-DSA-44 verification; `CachedFfiTransaction::with_qr_rules` |
+| `zebra-consensus` | enables the rule at the activation height for block and mempool transactions; P2PQH-aware standardness; pre-activation mempool policy |
+| `zebra-chain` | `qr_soft_fork_height` network parameter (never set on Mainnet) |
+| `zebra-network` | `qr_soft_fork_height` in the `testnet_parameters` config |
+| `zebrad` | mempool storage accepts P2PQH outputs and spends |
+| `zubit-wallet` | new demo tool: keygen, transaction building, ZIP 244 sighash, ML-DSA-44 signing, RPC |
 
-For a detailed understanding of our CI/CD system, including workflow diagrams,
-infrastructure details, and best practices, see our [CI/CD Architecture
-Documentation](.github/workflows/README.md).
+## Status and limits
 
-## Documentation
+- [x] Consensus rule, mempool policy, activation parameter
+- [x] Unit and full-interpreter tests
+- [x] End-to-end Regtest demo on a real node
+- [ ] Draft ZIP
+- [ ] Independent review / audit
+- [ ] Fee rule for large post-quantum inputs (a spend is ~3.9 KB, ~26 ZIP 317 actions)
 
-The Zcash Foundation maintains the following resources documenting Zebra:
+This is **research code**. It is not audited and is not part of the Zcash protocol. It could only
+reach mainnet through a ZIP and a network upgrade adopted by the Zcash community.
 
-- The Zebra Book:
-  - [General Introduction](https://zebra.zfnd.org/index.html),
-  - [User Documentation](https://zebra.zfnd.org/user.html),
-  - [Developer Documentation](https://zebra.zfnd.org/dev.html).
+What it does **not** cover: existing t-addresses, Sapling, and Orchard are unchanged. Moving funds
+into a P2PQH output still uses one classical signature, so it has to happen before a quantum
+attacker exists.
 
-  - User guides of note:
-    - [Zebra Health Endpoints](https://zebra.zfnd.org/user/health.html) — liveness/readiness checks for Kubernetes and load balancers
+## Credits
 
-- The [documentation of the public
-  APIs](https://docs.rs/zebrad/latest/zebrad/#zebra-crates) for the latest
-  releases of the individual Zebra crates.
+Built on [Zebra](https://github.com/ZcashFoundation/zebra) by the Zcash Foundation (MIT OR Apache-2.0);
+the original README is in [`README.zebra.md`](README.zebra.md). ML-DSA via the
+[`fips204`](https://crates.io/crates/fips204) crate. Code is released under the same licenses as Zebra.
 
-- The [documentation of the internal APIs](https://zebra.zfnd.org/internal)
-  for the `main` branch of the whole Zebra monorepo.
+---
 
-## User support
+## Коротко (RU)
 
-If Zebra doesn't behave the way you expected, [open an
-issue](https://github.com/ZcashFoundation/zebra/issues/new/choose). We regularly
-triage new issues and we will respond. We maintain a list of known issues in the
-[Troubleshooting](https://zebra.zfnd.org/user/troubleshooting.html) section of
-the book.
-
-If you want to chat with us, [Join the Zcash Foundation Discord
-Server](https://discord.com/invite/aRgNRVwsM8) and find the "zebra-support"
-channel.
-
-## Security
-
-Zebra has a [responsible disclosure
-policy](https://github.com/ZcashFoundation/zebra/blob/main/SECURITY.md), which
-we encourage security researchers to follow.
-
-## License
-
-Zebra is distributed under the terms of both the MIT license and the Apache
-License (Version 2.0). Some Zebra crates are distributed under the [MIT license
-only](LICENSE-MIT), because some of their code was originally from MIT-licensed
-projects. See each crate's directory for details.
-
-See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT).
+**Zubit** — исследовательский форк узла Zebra для Zcash. Он добавляет новый тип прозрачного выхода
+**P2PQH**, который можно потратить только с постквантовой подписью **ML-DSA-44** (стандарт NIST
+FIPS 204). Изменение устроено как мягкий форк и включается с заданной высоты блока. Всё работает на
+локальной сети Regtest: демо переводит монеты на P2PQH, узел отклоняет четыре поддельные траты и
+принимает настоящую. В основной сети Zcash это не действует — для этого нужен ZIP и обновление сети.
+Код не проходил аудит.

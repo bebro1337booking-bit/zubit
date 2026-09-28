@@ -32,7 +32,12 @@ zebra-chain = { path = "../zebra-chain", version = "13.0.0" }
 rand = { workspace = true }
 thiserror = { workspace = true }
 
+# Zubit: ML-DSA-44 (FIPS 204) verification for P2PQH outputs.
+blake2b_simd = { workspace = true }
+fips204 = { version = "0.4.6", default-features = false, features = ["ml-dsa-44"] }
+
 [dev-dependencies]
+fips204 = { version = "0.4.6", default-features = false, features = ["ml-dsa-44", "default-rng"] }
 hex = { workspace = true }
 lazy_static = { workspace = true }
 ripemd = { workspace = true }

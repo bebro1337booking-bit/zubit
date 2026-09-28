@@ -491,6 +491,8 @@ pub struct ParametersBuilder {
     checkpoints: Arc<CheckpointList>,
     /// Height at which the soft-fork to temporarily disable Orchard in transactions activates
     temporary_orchard_disabling_soft_fork_height: Option<Height>,
+    /// Zubit: height at which P2PQH outputs start requiring an ML-DSA-44 signature.
+    qr_soft_fork_height: Option<Height>,
 }
 
 impl Default for ParametersBuilder {
@@ -530,6 +532,7 @@ impl Default for ParametersBuilder {
             temporary_orchard_disabling_soft_fork_height: Some(
                 super::TESTNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT,
             ),
+            qr_soft_fork_height: None,
         }
     }
 }
@@ -845,6 +848,13 @@ impl ParametersBuilder {
         self
     }
 
+    /// Zubit: sets the height at which P2PQH outputs start requiring an ML-DSA-44 signature,
+    /// or disables the rule with `None`.
+    pub fn with_qr_soft_fork_height(mut self, height: impl Into<Option<Height>>) -> Self {
+        self.qr_soft_fork_height = height.into();
+        self
+    }
+
     /// Converts the builder to a [`Parameters`] struct
     fn finish(self) -> Parameters {
         let Self {
@@ -863,6 +873,7 @@ impl ParametersBuilder {
             lockbox_disbursements,
             checkpoints,
             temporary_orchard_disabling_soft_fork_height,
+            qr_soft_fork_height,
         } = self;
         Parameters {
             network_name,
@@ -880,6 +891,7 @@ impl ParametersBuilder {
             lockbox_disbursements,
             checkpoints,
             temporary_orchard_disabling_soft_fork_height,
+            qr_soft_fork_height,
         }
     }
 
@@ -927,9 +939,11 @@ impl ParametersBuilder {
             lockbox_disbursements,
             checkpoints: _,
             temporary_orchard_disabling_soft_fork_height: _,
+            qr_soft_fork_height,
         } = Self::default();
 
         self.activation_heights == activation_heights
+            && self.qr_soft_fork_height == qr_soft_fork_height
             && self.network_magic == network_magic
             && self.genesis_hash == genesis_hash
             && self.slow_start_interval == slow_start_interval
@@ -960,6 +974,9 @@ pub struct RegtestParameters {
     /// Whether to allow coinbase spends to have transparent outputs (inverse of
     /// zcashd's `-regtestshieldcoinbase`).
     pub should_allow_unshielded_coinbase_spends: Option<bool>,
+    /// Zubit: height at which P2PQH outputs start requiring an ML-DSA-44 signature.
+    /// `None` leaves the rule disabled.
+    pub qr_soft_fork_height: Option<Height>,
 }
 
 impl From<ConfiguredActivationHeights> for RegtestParameters {
@@ -1005,6 +1022,8 @@ pub struct Parameters {
     checkpoints: Arc<CheckpointList>,
     /// Height at which the soft-fork to temporarily disable Orchard in transactions activates
     temporary_orchard_disabling_soft_fork_height: Option<Height>,
+    /// Zubit: height at which P2PQH outputs start requiring an ML-DSA-44 signature.
+    qr_soft_fork_height: Option<Height>,
 }
 
 impl Default for Parameters {
@@ -1034,6 +1053,7 @@ impl Parameters {
             checkpoints,
             extend_funding_stream_addresses_as_required,
             should_allow_unshielded_coinbase_spends,
+            qr_soft_fork_height,
         }: RegtestParameters,
     ) -> Result<Self, ParametersBuilderError> {
         let mut parameters = Self::build()
@@ -1048,6 +1068,7 @@ impl Parameters {
             // Like the default Testnet activation heights stripped below, the default Testnet's
             // temporary Orchard-disabling soft fork does not apply to Regtest.
             .disable_temporary_orchard_disabling_soft_fork()
+            .with_qr_soft_fork_height(qr_soft_fork_height)
             // Removes default Testnet activation heights if not configured,
             // most network upgrades are disabled by default for Regtest in zcashd
             .with_activation_heights(activation_heights.for_regtest())?
@@ -1097,6 +1118,8 @@ impl Parameters {
             lockbox_disbursements: _,
             checkpoints: _,
             temporary_orchard_disabling_soft_fork_height: _,
+            // Configurable on Regtest
+            qr_soft_fork_height: _,
         } = Self::new_regtest(Default::default()).expect("default regtest parameters are valid");
 
         self.network_name == network_name
@@ -1201,6 +1224,11 @@ impl Parameters {
     /// transactions activates.
     pub fn temporary_orchard_disabling_soft_fork_height(&self) -> Option<Height> {
         self.temporary_orchard_disabling_soft_fork_height
+    }
+
+    /// Zubit: returns the height at which P2PQH outputs start requiring an ML-DSA-44 signature.
+    pub fn qr_soft_fork_height(&self) -> Option<Height> {
+        self.qr_soft_fork_height
     }
 }
 

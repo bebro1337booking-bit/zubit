@@ -328,7 +328,7 @@ where
                 Self::block_spent_utxos(tx.clone(), known_utxos, state.clone()).await?;
 
             let cached_ffi_transaction =
-                Arc::new(CachedFfiTransaction::new(tx.clone(), Arc::new(spent_outputs), nu).map_err(|_| TransactionError::UnsupportedByNetworkUpgrade(tx.version(), nu))?);
+                Arc::new(CachedFfiTransaction::new(tx.clone(), Arc::new(spent_outputs), nu).map_err(|_| TransactionError::UnsupportedByNetworkUpgrade(tx.version(), nu))?.with_qr_rules(network.qr_soft_fork_active(height)));
 
             tracing::trace!(?tx_id, "got state UTXOs");
 
@@ -517,6 +517,11 @@ where
             // doing expensive script verification, to avoid DoS attacks on
             // the script interpreter.
             check::mempool_standard_input_scripts(tx.as_ref(), &spent_outputs)?;
+            check::mempool_qr_policy(
+                tx.as_ref(),
+                &spent_outputs,
+                network.qr_soft_fork_active(height),
+            )?;
 
             // Apply ZIP-317 policy before expensive cryptographic verification.
             let miner_fee = miner_fee(tx.as_ref(), &spent_utxos)?;
@@ -524,7 +529,7 @@ where
             transaction::zip317::mempool_checks(unpaid_actions, miner_fee, unmined_tx.size)?;
 
             let cached_ffi_transaction =
-                Arc::new(CachedFfiTransaction::new(tx.clone(), Arc::new(spent_outputs), nu).map_err(|_| TransactionError::UnsupportedByNetworkUpgrade(tx.version(), nu))?);
+                Arc::new(CachedFfiTransaction::new(tx.clone(), Arc::new(spent_outputs), nu).map_err(|_| TransactionError::UnsupportedByNetworkUpgrade(tx.version(), nu))?.with_qr_rules(network.qr_soft_fork_active(height)));
 
             tracing::trace!(?tx_id, "got state UTXOs");
 

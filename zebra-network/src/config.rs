@@ -14,6 +14,7 @@ use tokio::fs;
 
 use tracing::Span;
 use zebra_chain::{
+    block::Height,
     common::atomic_write,
     parameters::{
         testnet::{
@@ -620,6 +621,9 @@ struct DTestnetParameters {
     temporary_orchard_disabling_soft_fork_height: Option<u32>,
     /// Regtest only: whether to allow coinbase spends to have transparent outputs.
     should_allow_unshielded_coinbase_spends: Option<bool>,
+    /// Zubit: height at which P2PQH outputs start requiring an ML-DSA-44 signature.
+    /// Unset means the rule is disabled.
+    qr_soft_fork_height: Option<u32>,
 }
 
 /// Network configuration used during deserialization.
@@ -718,6 +722,7 @@ impl From<Arc<testnet::Parameters>> for DTestnetParameters {
             should_allow_unshielded_coinbase_spends: params
                 .is_regtest()
                 .then(|| params.should_allow_unshielded_coinbase_spends()),
+            qr_soft_fork_height: params.qr_soft_fork_height().map(|height| height.0),
         }
     }
 }
@@ -908,6 +913,7 @@ where
         extend_funding_stream_addresses_as_required,
         temporary_orchard_disabling_soft_fork_height,
         should_allow_unshielded_coinbase_spends,
+        qr_soft_fork_height,
     } = params;
 
     // This is a Regtest-only consensus knob, so reject it rather than silently ignoring it.
@@ -1003,6 +1009,10 @@ where
         );
     }
 
+    if let Some(height) = qr_soft_fork_height {
+        params_builder = params_builder.with_qr_soft_fork_height(Height(height));
+    }
+
     // Return an error if the initial testnet peers includes any of the default initial Mainnet or Testnet
     // peers and the configured network parameters are incompatible with the default public Testnet.
     if !params_builder.is_compatible_with_default_parameters()
@@ -1031,6 +1041,7 @@ fn build_regtest_params(params: DTestnetParameters) -> RegtestParameters {
         checkpoints,
         extend_funding_stream_addresses_as_required,
         should_allow_unshielded_coinbase_spends,
+        qr_soft_fork_height,
         ..
     } = params;
 
@@ -1051,5 +1062,6 @@ fn build_regtest_params(params: DTestnetParameters) -> RegtestParameters {
         checkpoints: Some(checkpoints),
         extend_funding_stream_addresses_as_required,
         should_allow_unshielded_coinbase_spends,
+        qr_soft_fork_height: qr_soft_fork_height.map(Height),
     }
 }

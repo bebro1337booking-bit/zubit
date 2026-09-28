@@ -1,0 +1,24 @@
+# Zubit local Regtest node. Private, isolated chain: no peers, PoW disabled.
+
+[mining]
+# P2SH address of the redeem script `OP_TRUE` (anyone can spend) — demo funds only.
+# `zubit-wallet miner-address` prints the same value.
+miner_address = "t2SRyAR26tXTnZHfpa3jPqeyYmxCbAZxUnh"
+
+[network]
+network = "Regtest"
+listen_addr = "127.0.0.1:18344"
+
+[network.testnet_parameters]
+# Zubit: P2PQH outputs require an ML-DSA-44 signature from height 1.
+qr_soft_fork_height = 1
+
+[network.testnet_parameters.activation_heights]
+NU5 = 1
+
+[state]
+ephemeral = true
+
+[rpc]
+listen_addr = "127.0.0.1:18232"
+enable_cookie_auth = false

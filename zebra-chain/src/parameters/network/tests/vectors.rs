@@ -769,3 +769,38 @@ fn temporary_orchard_disabling_soft_fork_heights() {
     );
     assert!(!disabled.is_temporary_orchard_disabling_soft_fork_activation_height(testnet_height));
 }
+
+/// Zubit: the P2PQH soft fork is never active on Mainnet or the default Testnet, and is
+/// active from the configured height on Regtest and configured Testnets.
+#[test]
+fn qr_soft_fork_heights() {
+    let _init_guard = zebra_test::init();
+
+    assert_eq!(Network::Mainnet.qr_soft_fork_height(), None);
+    assert!(!Network::Mainnet.qr_soft_fork_active(Height(u32::MAX / 2)));
+    assert_eq!(Network::new_default_testnet().qr_soft_fork_height(), None);
+    assert_eq!(
+        Network::new_regtest(Default::default()).qr_soft_fork_height(),
+        None
+    );
+
+    let regtest = Network::new_regtest(RegtestParameters {
+        qr_soft_fork_height: Some(Height(5)),
+        ..Default::default()
+    });
+    assert!(regtest.is_regtest());
+    assert!(!regtest.qr_soft_fork_active(Height(4)));
+    assert!(regtest.qr_soft_fork_active(Height(5)));
+    assert!(regtest.qr_soft_fork_active(Height(6)));
+
+    let configured = testnet::Parameters::build()
+        .with_qr_soft_fork_height(Height(1_000))
+        .to_network()
+        .expect("failed to build configured network");
+    assert_eq!(configured.qr_soft_fork_height(), Some(Height(1_000)));
+
+    // A Testnet with the QR soft fork is not compatible with the default public Testnet.
+    assert!(!testnet::Parameters::build()
+        .with_qr_soft_fork_height(Height(1_000))
+        .is_compatible_with_default_parameters());
+}

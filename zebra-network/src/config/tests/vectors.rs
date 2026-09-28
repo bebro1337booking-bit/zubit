@@ -194,3 +194,38 @@ fn should_allow_unshielded_coinbase_spends_rejected_on_testnet() {
         "unexpected error: {err}"
     );
 }
+
+/// Zubit: a Regtest with the P2PQH soft fork configured survives a serialization
+/// round-trip, and loads from the TOML used by the Regtest demo.
+#[test]
+fn regtest_qr_soft_fork_height_serialization_roundtrip() {
+    let _init_guard = zebra_test::init();
+
+    let config = Config {
+        network: Network::new_regtest(testnet::RegtestParameters {
+            qr_soft_fork_height: Some(Height(1)),
+            ..Default::default()
+        }),
+        initial_testnet_peers: [].into(),
+        ..Config::default()
+    };
+    assert!(config.network.is_regtest());
+
+    let serialized = toml::to_string(&config).unwrap();
+    let deserialized: Config = toml::from_str(&serialized).unwrap();
+    assert_eq!(config, deserialized);
+    assert_eq!(deserialized.network.qr_soft_fork_height(), Some(Height(1)));
+
+    let from_demo_toml: Config = toml::from_str(
+        r#"
+        network = "Regtest"
+        [testnet_parameters]
+        qr_soft_fork_height = 1
+        [testnet_parameters.activation_heights]
+        NU5 = 1
+        "#,
+    )
+    .unwrap();
+    assert!(from_demo_toml.network.is_regtest());
+    assert!(from_demo_toml.network.qr_soft_fork_active(Height(1)));
+}

@@ -1,0 +1,25 @@
+== Zubit Regtest demo ==
+P2PQH scriptPubKey (39 bytes): 045a5542317520245a388c91643e0f448a646e7174b48036cfcc2fcd06eb3e32c9ed97127ff1a1
+
+[1] mining 101 blocks (tip was 0)
+    coinbase 9db3ad6885eabd6a21898a5a80346e2d8c446f4d60b9211718190aeb7afe5b02:0 = 625000000 zat
+
+[2] funding P2PQH output (consensus branch c2d6d0b4)
+    ebd39fb94609bba085661818690796d8ad5ae6c0b45e5e3400b06eae31eedfb2 mined at height 102: 624990000 zat locked to ML-DSA-44 key (fee 10000)
+
+[3] spend sighash (ZIP 244, SIGHASH_ALL): 5965fb4511b93ce181424e6bd59d6f0896e122cefbf6e315172017f070461a21
+
+[4] invalid spends
+  [ok] rejected: legacy-style spend with no ML-DSA signature (valid under old rules)
+       node said: failed to validate tx: WtxId("private"), error: transaction did not pass consensus validation: could not convert an asynchronous verification error: downcast to known transaction error type failed, original error: Qr(MalformedSpend)
+  [ok] rejected: correct key, corrupted signature
+       node said: failed to validate tx: WtxId("private"), error: transaction did not pass consensus validation: could not convert an asynchronous verification error: downcast to known transaction error type failed, original error: Qr(InvalidSignature)
+  [ok] rejected: attacker's own key and valid signature
+       node said: failed to validate tx: WtxId("private"), error: transaction did not pass consensus validation: could not convert an asynchronous verification error: downcast to known transaction error type failed, original error: Qr(PublicKeyMismatch)
+  [ok] rejected: owner's signature over a different transaction
+       node said: failed to validate tx: WtxId("private"), error: transaction did not pass consensus validation: could not convert an asynchronous verification error: downcast to known transaction error type failed, original error: Qr(InvalidSignature)
+
+[5] valid ML-DSA-44 spend
+    49040c92aa0db84cf75122265720b83e35428b072539a4955997d598ed292685 mined at height 103 (3855 bytes, fee 130000 zat)
+
+Demo passed: the P2PQH output could only be spent with the owner's ML-DSA-44 signature.

@@ -264,6 +264,9 @@ pub enum TransactionError {
     #[error("mempool transaction has non-standard transparent inputs")]
     NonStandardInputs,
 
+    #[error("mempool transaction uses a P2PQH output before the Zubit soft fork is active")]
+    QrBeforeActivation,
+
     #[error("transaction uses an incorrect consensus branch id")]
     WrongConsensusBranchId,
 
